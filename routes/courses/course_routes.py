@@ -52,14 +52,8 @@ class CourseCreate(BaseModel):
     internship_included: bool = False
     installment_available: bool = False
     installment_policy: Optional[str] = None
-    course_category: str  # "general" or "executive"
-    category_data: CategoryData
-    
-    @validator('course_category')
-    def validate_category(cls, v):
-        if v not in ["general", "executive"]:
-            raise ValueError('course_category must be "general" or "executive"')
-        return v
+    general_data: Optional[CategoryData] = None
+    executive_data: Optional[CategoryData] = None
 
 class CourseUpdate(BaseModel):
     course_name: Optional[str] = None
@@ -74,8 +68,8 @@ class CourseUpdate(BaseModel):
     internship_included: Optional[bool] = None
     installment_available: Optional[bool] = None
     installment_policy: Optional[str] = None
-    course_category: Optional[str] = None
-    category_data: Optional[Dict[str, Any]] = None
+    general_data: Optional[Dict[str, Any]] = None
+    executive_data: Optional[Dict[str, Any]] = None
 
 class CourseResponse(BaseModel):
     course_id: str
@@ -91,10 +85,10 @@ class CourseResponse(BaseModel):
     internship_included: bool
     installment_available: bool
     installment_policy: Optional[str]
-    course_category: str
     course_photo: Optional[str]
     course_video: Optional[str]
-    category_data: Dict[str, Any]
+    general_data: Optional[Dict[str, Any]]
+    executive_data: Optional[Dict[str, Any]]
     
     class Config:
         from_attributes = True
@@ -131,8 +125,6 @@ def create_course(
     Create a new course with optional photo and video uploads
     """
     import json
-    
-    # Parse JSON data
     try:
         course_dict = json.loads(course_data)
         course = CourseCreate(**course_dict)
@@ -141,27 +133,24 @@ def create_course(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid course data: {str(e)}"
         )
-    
-    # Check if course with same code and category already exists
-    existing_course = db.query(Course).filter(
-        Course.course_code == course.course_code,
-        Course.course_category == course.course_category
-    ).first()
+    # Check if course with same code already exists
+    existing_course = db.query(Course).filter(Course.course_code == course.course_code).first()
     if existing_course:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Course code already exists for this category"
+            detail="Course code already exists"
         )
-    
-    # Generate course ID
     course_id = generate_course_id()
-    
-    # Add timestamps to category_data
-    category_data_dict = course.category_data.dict()
-    category_data_dict["created_at"] = datetime.utcnow().isoformat()
-    category_data_dict["updated_at"] = datetime.utcnow().isoformat()
-    
-    # Create course object
+    # Add timestamps to category data
+    general_data = course.general_data.dict() if course.general_data else None
+    executive_data = course.executive_data.dict() if course.executive_data else None
+    now = datetime.utcnow().isoformat()
+    if general_data:
+        general_data["created_at"] = now
+        general_data["updated_at"] = now
+    if executive_data:
+        executive_data["created_at"] = now
+        executive_data["updated_at"] = now
     new_course = Course(
         course_id=course_id,
         course_name=course.course_name,
@@ -176,43 +165,28 @@ def create_course(
         internship_included=course.internship_included,
         installment_available=course.installment_available,
         installment_policy=course.installment_policy,
-        course_category=course.course_category,
-        category_data=category_data_dict
+        general_data=general_data,
+        executive_data=executive_data
     )
-    
-    # Handle file uploads
     if course_photo:
         new_course.course_photo = save_upload_file(course_photo, course_id, "photo")
     if course_video:
         new_course.course_video = save_upload_file(course_video, course_id, "video")
-    
     db.add(new_course)
     db.commit()
     db.refresh(new_course)
-    
     return new_course
 
 @router.get("/get-all", response_model=List[CourseResponse])
 def get_all_courses(
     skip: int = 0,
     limit: int = 100,
-    category: Optional[str] = None,
-    active_only: Optional[bool] = None,
     db: Session = Depends(get_db)
 ):
     """
     Get all courses with optional filters
     """
     query = db.query(Course)
-    
-    # Filter by category
-    if category:
-        query = query.filter(Course.course_category == category)
-    
-    # Filter by active status (from JSONB)
-    if active_only is not None:
-        query = query.filter(Course.category_data["active_status"].astext.cast(db.bind.dialect.BOOLEAN) == active_only)
-    
     courses = query.offset(skip).limit(limit).all()
     # Convert absolute paths to relative for response
     for c in courses:
@@ -228,18 +202,15 @@ def get_course_by_id(course_id: str, db: Session = Depends(get_db)):
     Get a single course by ID
     """
     course = db.query(Course).filter(Course.course_id == course_id).first()
-    
     if not course:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Course not found"
         )
-    
     if course.course_photo and os.path.isabs(course.course_photo):
         course.course_photo = os.path.relpath(course.course_photo, BASE_DIR)
     if course.course_video and os.path.isabs(course.course_video):
         course.course_video = os.path.relpath(course.course_video, BASE_DIR)
-    
     return course
 
 @router.put("/put-by/{course_id}", response_model=CourseResponse)
@@ -254,59 +225,41 @@ def update_course(
     Update a course by ID. Can update any field(s)
     """
     import json
-    
-    # Get existing course
     course = db.query(Course).filter(Course.course_id == course_id).first()
     if not course:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Course not found"
         )
-    
-    # Parse and apply updates if provided
     if course_data:
         try:
             update_dict = json.loads(course_data)
             update = CourseUpdate(**update_dict)
-            
-            # Update regular fields
             for field, value in update.dict(exclude_unset=True).items():
-                if field == "category_data" and value is not None:
-                    # Merge with existing category_data
-                    existing_data = course.category_data or {}
+                if field in ["general_data", "executive_data"] and value is not None:
+                    existing_data = getattr(course, field) or {}
                     existing_data.update(value)
                     existing_data["updated_at"] = datetime.utcnow().isoformat()
                     setattr(course, field, existing_data)
-                elif field != "category_data" and value is not None:
+                elif value is not None:
                     setattr(course, field, value)
-                    
         except Exception as e:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Invalid update data: {str(e)}"
             )
-    
-    # Handle file uploads
     if course_photo:
-        # Delete old photo if exists
         old_photo_path = BASE_DIR / course.course_photo if course.course_photo else None
         if old_photo_path and old_photo_path.exists():
             os.remove(old_photo_path)
         course.course_photo = save_upload_file(course_photo, course_id, "photo")
     if course_video:
-        # Delete old video if exists
         old_video_path = BASE_DIR / course.course_video if course.course_video else None
         if old_video_path and old_video_path.exists():
             os.remove(old_video_path)
         course.course_video = save_upload_file(course_video, course_id, "video")
-    
-    # Update timestamp in category_data
-    if course.category_data:
-        course.category_data["updated_at"] = datetime.utcnow().isoformat()
-    
     db.commit()
     db.refresh(course)
-    
     return course
 
 @router.delete("/delete-by/{course_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -315,21 +268,17 @@ def delete_course(course_id: str, db: Session = Depends(get_db)):
     Delete a course by ID
     """
     course = db.query(Course).filter(Course.course_id == course_id).first()
-    
     if not course:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Course not found"
         )
-    
     # Delete uploaded files
     course_dir = UPLOADS_DIR / course_id
     if course_dir.exists():
         shutil.rmtree(course_dir)
-    
     db.delete(course)
     db.commit()
-    
     return None
 
 @router.delete("/bulk/delete", status_code=status.HTTP_200_OK)
@@ -339,23 +288,18 @@ def bulk_delete_courses(request: BulkDeleteRequest, db: Session = Depends(get_db
     """
     deleted_count = 0
     not_found = []
-    
     for course_id in request.course_ids:
         course = db.query(Course).filter(Course.course_id == course_id).first()
-        
         if course:
             # Delete uploaded files
             course_dir = UPLOADS_DIR / course_id
             if course_dir.exists():
                 shutil.rmtree(course_dir)
-            
             db.delete(course)
             deleted_count += 1
         else:
             not_found.append(course_id)
-    
     db.commit()
-    
     return {
         "message": f"Deleted {deleted_count} course(s)",
         "deleted_count": deleted_count,
