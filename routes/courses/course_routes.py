@@ -106,19 +106,18 @@ class BulkDeleteRequest(BaseModel):
 def save_upload_file(upload_file: UploadFile, course_id: str, file_type: str) -> str:
     """
     Save uploaded file to /uploads/courses/{course_id}/
-    Returns the file path
+    Returns the relative file path
     """
     course_dir = UPLOADS_DIR / course_id
     course_dir.mkdir(parents=True, exist_ok=True)
-    
     file_extension = Path(upload_file.filename).suffix
     file_name = f"{file_type}{file_extension}"
     file_path = course_dir / file_name
-    
     with file_path.open("wb") as buffer:
         shutil.copyfileobj(upload_file.file, buffer)
-    
-    return str(file_path)
+    # Return relative path from BACKEND directory
+    rel_path = os.path.relpath(file_path, BASE_DIR)
+    return rel_path
 
 # API Endpoints
 @router.post("/create", response_model=CourseResponse, status_code=status.HTTP_201_CREATED)
@@ -215,6 +214,12 @@ def get_all_courses(
         query = query.filter(Course.category_data["active_status"].astext.cast(db.bind.dialect.BOOLEAN) == active_only)
     
     courses = query.offset(skip).limit(limit).all()
+    # Convert absolute paths to relative for response
+    for c in courses:
+        if c.course_photo and os.path.isabs(c.course_photo):
+            c.course_photo = os.path.relpath(c.course_photo, BASE_DIR)
+        if c.course_video and os.path.isabs(c.course_video):
+            c.course_video = os.path.relpath(c.course_video, BASE_DIR)
     return courses
 
 @router.get("/get-by/{course_id}", response_model=CourseResponse)
@@ -229,6 +234,11 @@ def get_course_by_id(course_id: str, db: Session = Depends(get_db)):
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Course not found"
         )
+    
+    if course.course_photo and os.path.isabs(course.course_photo):
+        course.course_photo = os.path.relpath(course.course_photo, BASE_DIR)
+    if course.course_video and os.path.isabs(course.course_video):
+        course.course_video = os.path.relpath(course.course_video, BASE_DIR)
     
     return course
 
@@ -279,14 +289,15 @@ def update_course(
     # Handle file uploads
     if course_photo:
         # Delete old photo if exists
-        if course.course_photo and os.path.exists(course.course_photo):
-            os.remove(course.course_photo)
+        old_photo_path = BASE_DIR / course.course_photo if course.course_photo else None
+        if old_photo_path and old_photo_path.exists():
+            os.remove(old_photo_path)
         course.course_photo = save_upload_file(course_photo, course_id, "photo")
-    
     if course_video:
         # Delete old video if exists
-        if course.course_video and os.path.exists(course.course_video):
-            os.remove(course.course_video)
+        old_video_path = BASE_DIR / course.course_video if course.course_video else None
+        if old_video_path and old_video_path.exists():
+            os.remove(old_video_path)
         course.course_video = save_upload_file(course_video, course_id, "video")
     
     # Update timestamp in category_data
