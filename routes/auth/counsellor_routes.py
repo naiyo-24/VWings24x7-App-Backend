@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, Query
 from sqlalchemy.orm import Session
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Any
 from pathlib import Path
 import os
 import shutil
@@ -26,14 +26,14 @@ def validate_and_get_course_details(db: Session, commission_map: Dict[str, float
     missing = [cid for cid in course_ids if cid not in found_ids]
     if missing:
         raise HTTPException(status_code=400, detail=f"Invalid course ids in commission map: {missing}")
-    # normalize commissions to float (accept int/float/Decimal/string numeric values)
-    normalized: Dict[str, float] = {}
+    # build mapping course_id -> { commission: float, course_name: str }
+    course_by_id = {c.course_id: c for c in courses}
+    normalized: Dict[str, Dict[str, Any]] = {}
     for cid, raw_val in commission_map.items():
         try:
             if isinstance(raw_val, Decimal):
                 d = raw_val
             elif isinstance(raw_val, (int, float)):
-                # convert via str to avoid binary float surprises
                 d = Decimal(str(raw_val))
             elif isinstance(raw_val, str):
                 d = Decimal(raw_val)
@@ -45,9 +45,62 @@ def validate_and_get_course_details(db: Session, commission_map: Dict[str, float
         if not d.is_finite():
             raise HTTPException(status_code=400, detail=f"Invalid commission value for course {cid}: {raw_val}")
 
-        normalized[cid] = float(d)
+        course = course_by_id.get(cid)
+        course_name = course.course_name if course else None
+        normalized[cid] = {
+            "commission": float(d),
+            "course_name": course_name,
+        }
 
     return normalized
+
+# Helper: format per_courses_commission for output
+def format_per_courses_commission_for_output(db: Session, commission_map: Optional[Dict]) -> Dict[str, Dict[str, Any]]:
+    """Normalize stored per_courses_commission into the shape:
+    { course_id: { "commission": float, "course_name": Optional[str] } }
+    Handles legacy formats where values may be numeric (int/float/str) or the new dict shape.
+    """
+    if not commission_map:
+        return {}
+
+    course_ids = list(commission_map.keys())
+    courses = db.query(Course).filter(Course.course_id.in_(course_ids)).all()
+    course_by_id = {c.course_id: c for c in courses}
+
+    out: Dict[str, Dict[str, Any]] = {}
+    for cid, raw_val in commission_map.items():
+        # determine commission numeric value
+        if isinstance(raw_val, dict) and "commission" in raw_val:
+            raw_comm = raw_val["commission"]
+        else:
+            raw_comm = raw_val
+
+        try:
+            # accept Decimal, int, float, numeric strings
+            if isinstance(raw_comm, Decimal):
+                d = raw_comm
+            elif isinstance(raw_comm, (int, float)):
+                d = Decimal(str(raw_comm))
+            elif isinstance(raw_comm, str):
+                d = Decimal(raw_comm)
+            else:
+                raise InvalidOperation()
+        except InvalidOperation:
+            raise HTTPException(status_code=500, detail=f"Invalid commission stored for course {cid}: {raw_comm}")
+
+        if not d.is_finite():
+            raise HTTPException(status_code=500, detail=f"Invalid commission stored for course {cid}: {raw_comm}")
+
+        course = course_by_id.get(cid)
+        course_name = None
+        if isinstance(raw_val, dict) and raw_val.get("course_name"):
+            course_name = raw_val.get("course_name")
+        elif course:
+            course_name = course.course_name
+
+        out[cid] = {"commission": float(d), "course_name": course_name}
+
+    return out
 
 
 # Schemas
@@ -64,7 +117,7 @@ class CounsellorBase(BaseModel):
     branch_name: Optional[str] = None
     ifsc_code: Optional[str] = None
     upi_id: Optional[str] = None
-    per_courses_commission: Optional[Dict[str, float]] = None
+    per_courses_commission: Optional[Dict[str, Dict[str, Any]]] = None
     profile_photo: Optional[str] = None
 
 
@@ -85,7 +138,7 @@ class CounsellorUpdate(BaseModel):
     branch_name: Optional[str] = None
     ifsc_code: Optional[str] = None
     upi_id: Optional[str] = None
-    per_courses_commission: Optional[Dict[str, float]] = None
+    per_courses_commission: Optional[Dict[str, Dict[str, Any]]] = None
     password: Optional[str] = None
     profile_photo: Optional[str] = None
 
@@ -175,7 +228,8 @@ async def create_counsellor(
     db.commit()
     db.refresh(db_obj)
 
-    return CounsellorOut(**{**db_obj.__dict__})
+    per_courses_commission_out = format_per_courses_commission_for_output(db, db_obj.per_courses_commission)
+    return CounsellorOut(**{**db_obj.__dict__, "per_courses_commission": per_courses_commission_out})
 
 
 # Counsellor login (email + password)
@@ -196,7 +250,8 @@ def counsellor_login(
         except Exception:
             profile_photo_path = counsellor.profile_photo
 
-    return CounsellorOut(**{**counsellor.__dict__, "profile_photo": profile_photo_path})
+    per_courses_commission_out = format_per_courses_commission_for_output(db, counsellor.per_courses_commission)
+    return CounsellorOut(**{**counsellor.__dict__, "profile_photo": profile_photo_path, "per_courses_commission": per_courses_commission_out})
 
 # GET all counsellors
 @router.get("/get-all", response_model=List[CounsellorOut])
@@ -211,7 +266,8 @@ def get_all_counsellors(db: Session = Depends(get_db)):
                 profile_photo_path = os.path.relpath(str(Path(c.profile_photo)), os.getcwd())
             except Exception:
                 profile_photo_path = c.profile_photo
-        result.append(CounsellorOut(**{**c.__dict__, "profile_photo": profile_photo_path}))
+        per_courses_commission_out = format_per_courses_commission_for_output(db, c.per_courses_commission)
+        result.append(CounsellorOut(**{**c.__dict__, "profile_photo": profile_photo_path, "per_courses_commission": per_courses_commission_out}))
     return result
 
 # Get counsellor by ID
@@ -226,7 +282,8 @@ def get_counsellor_by_id(counsellor_id: str, db: Session = Depends(get_db)):
             profile_photo_path = os.path.relpath(str(Path(counsellor.profile_photo)), os.getcwd())
         except Exception:
             profile_photo_path = counsellor.profile_photo
-    return CounsellorOut(**{**counsellor.__dict__, "profile_photo": profile_photo_path})
+        per_courses_commission_out = format_per_courses_commission_for_output(db, counsellor.per_courses_commission)
+        return CounsellorOut(**{**counsellor.__dict__, "profile_photo": profile_photo_path, "per_courses_commission": per_courses_commission_out})
 
 # Update counsellor by ID
 @router.put("/put-by/{counsellor_id}", response_model=CounsellorOut)
@@ -317,7 +374,9 @@ async def update_counsellor(
         except Exception:
             profile_photo_path = counsellor.profile_photo
 
-    return CounsellorOut(**{**counsellor.__dict__, "profile_photo": profile_photo_path})
+    per_courses_commission_out = format_per_courses_commission_for_output(db, counsellor.per_courses_commission)
+
+    return CounsellorOut(**{**counsellor.__dict__, "profile_photo": profile_photo_path, "per_courses_commission": per_courses_commission_out})
 
 # Delete counsellor by ID
 @router.delete("/delete-by/{counsellor_id}", response_model=dict)
