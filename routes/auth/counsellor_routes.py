@@ -5,6 +5,7 @@ from pathlib import Path
 import os
 import shutil
 import json
+from decimal import Decimal, InvalidOperation
 from db import get_db
 from models.auth.counsellor_models import Counsellor
 from models.courses.course_models import Course
@@ -25,8 +26,27 @@ def validate_and_get_course_details(db: Session, commission_map: Dict[str, float
     missing = [cid for cid in course_ids if cid not in found_ids]
     if missing:
         raise HTTPException(status_code=400, detail=f"Invalid course ids in commission map: {missing}")
-    # normalize commissions to float
-    normalized = {cid: float(commission_map[cid]) for cid in commission_map}
+    # normalize commissions to float (accept int/float/Decimal/string numeric values)
+    normalized: Dict[str, float] = {}
+    for cid, raw_val in commission_map.items():
+        try:
+            if isinstance(raw_val, Decimal):
+                d = raw_val
+            elif isinstance(raw_val, (int, float)):
+                # convert via str to avoid binary float surprises
+                d = Decimal(str(raw_val))
+            elif isinstance(raw_val, str):
+                d = Decimal(raw_val)
+            else:
+                raise InvalidOperation()
+        except InvalidOperation:
+            raise HTTPException(status_code=400, detail=f"Invalid commission value for course {cid}: {raw_val}")
+
+        if not d.is_finite():
+            raise HTTPException(status_code=400, detail=f"Invalid commission value for course {cid}: {raw_val}")
+
+        normalized[cid] = float(d)
+
     return normalized
 
 
