@@ -6,4 +6,7 @@ __all__ = [
     "auth",
     "courses",
     "help_center",
+    "classrooms",
+    "class_members",
+    "class_messages",
 ]

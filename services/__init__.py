@@ -8,4 +8,7 @@ __all__ = [
     "report_id_generator",
     "student_id_generator",
     "teacher_id_generator",
+    "class_id_generator",
+    "message_id_generator",
+    "ws_manager",
 ]

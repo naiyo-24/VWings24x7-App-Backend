@@ -74,6 +74,20 @@ class TeacherOut(TeacherBase):
 		from_attributes = True
 
 
+# Login schemas
+class TeacherLogin(BaseModel):
+	email: EmailStr
+	password: str
+
+
+class TeacherLoginResponse(BaseModel):
+	message: str
+	teacher: TeacherOut
+
+	class Config:
+		from_attributes = True
+
+
 # Create Teacher
 @router.post("/create", response_model=TeacherOut, status_code=status.HTTP_201_CREATED)
 async def create_teacher(
@@ -152,6 +166,18 @@ async def create_teacher(
 
 	# return using same pattern as student_routes
 	return TeacherOut(**{**db_teacher.__dict__})
+
+
+# Login endpoint
+@router.post("/login", response_model=TeacherLoginResponse)
+def login_teacher(credentials: TeacherLogin, db: Session = Depends(get_db)):
+	teacher = db.query(Teacher).filter(Teacher.email == credentials.email).first()
+	if not teacher:
+		raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
+	# plaintext password check (replace with hashed check in production)
+	if credentials.password != teacher.password:
+		raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
+	return {"message": "Login successful", "teacher": teacher}
 
 
 # Get all teachers

@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from db import create_tables
 from routes.auth import admin_routes, student_routes, teacher_routes, counsellor_routes
+from routes.classroom import ws_routes as classroom_ws_routes, classroom_routes
 from routes.courses import course_routes
 from routes.aboutus import about_us_routes
 from routes.help_center import help_center_routes
@@ -47,6 +48,8 @@ app.include_router(help_center_routes.router)
 app.include_router(student_routes.router)
 app.include_router(teacher_routes.router)
 app.include_router(counsellor_routes.router)
+app.include_router(classroom_ws_routes.router)
+app.include_router(classroom_routes.router)
 app.include_router(admission_code_routes.router)
 app.include_router(admission_enquiry_routes.router)
 
