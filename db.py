@@ -42,7 +42,6 @@ from models.aboutus import about_us_models
 from models.help_center import help_center_models
 from models.admission import admission_code_models
 from models.admission import admission_enquiry_models
-from models.classroom import classroom_models
 from models.ads import ads_models
 
 # Function to create all tables
