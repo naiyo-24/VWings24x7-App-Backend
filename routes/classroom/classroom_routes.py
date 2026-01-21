@@ -63,13 +63,13 @@ async def create_classroom(
     return classroom
 
 
-@router.get("/", response_model=List[ClassroomResponse])
+@router.get("/get-all", response_model=List[ClassroomResponse])
 def get_all_classrooms(db: Session = Depends(get_db)):
     classrooms = db.query(Classroom).all()
     return classrooms
 
 
-@router.get("/{class_id}", response_model=ClassroomResponse)
+@router.get("/get-by/{class_id}", response_model=ClassroomResponse)
 def get_classroom_by_id(class_id: str, db: Session = Depends(get_db)):
     classroom = db.query(Classroom).filter(Classroom.class_id == class_id).first()
     if not classroom:
@@ -77,7 +77,7 @@ def get_classroom_by_id(class_id: str, db: Session = Depends(get_db)):
     return classroom
 
 
-@router.put("/{class_id}", response_model=ClassroomResponse)
+@router.put("/update-by/{class_id}", response_model=ClassroomResponse)
 async def update_classroom(
     class_id: str,
     class_name: str = File(...),
@@ -99,7 +99,7 @@ async def update_classroom(
     return classroom
 
 
-@router.delete("/{class_id}")
+@router.delete("/delete-by/{class_id}")
 def delete_classroom(class_id: str, db: Session = Depends(get_db)):
     classroom = db.query(Classroom).filter(Classroom.class_id == class_id).first()
     if not classroom:
@@ -116,7 +116,7 @@ def delete_classroom(class_id: str, db: Session = Depends(get_db)):
 class BulkDeleteRequest(BaseModel):
     class_ids: List[str]
 
-@router.delete("/bulk")
+@router.delete("/delete/bulk")
 def delete_classrooms_bulk(request: BulkDeleteRequest, db: Session = Depends(get_db)):
     deleted = 0
     for class_id in request.class_ids:
