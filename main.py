@@ -4,7 +4,7 @@ from fastapi.staticfiles import StaticFiles
 from db import create_tables
 from routes.auth import admin_routes, student_routes, teacher_routes, counsellor_routes
 from routes.courses import course_routes
-from routes.classroom import classroom_routes, member_routes
+from routes.classroom import classroom_routes, member_routes, chatroom_routes
 from routes.aboutus import about_us_routes
 from routes.help_center import help_center_routes
 from routes.admission import admission_code_routes
@@ -46,6 +46,7 @@ app.include_router(admin_routes.router)
 app.include_router(course_routes.router)
 app.include_router(classroom_routes.router)
 app.include_router(member_routes.router)
+app.include_router(chatroom_routes.router)
 app.include_router(about_us_routes.router)
 app.include_router(help_center_routes.router)
 app.include_router(student_routes.router)

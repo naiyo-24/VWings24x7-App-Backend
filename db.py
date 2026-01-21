@@ -46,6 +46,7 @@ from models.ads import ads_models
 from models.announcement import announcement_models
 from models.classroom import classroom_models
 from models.classroom import member_models
+from models.classroom import chatroom_models
 
 # Function to create all tables
 def create_tables():
