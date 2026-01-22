@@ -83,9 +83,22 @@ def generate_salary_slip_pdf(pdf_path, teacher, slips: list):
 		c.drawString(100, height-80, company_address)
 		c.drawString(100, height-95, f"Phone: {company_phone}  Email: {company_email}")
 
-		# keep divider position slightly lower to ensure spacing below any header details
-		# increase offset to avoid overlap
-		divider_y_local = height - 230
+		# Draw teacher & bank info (same block as full header, but omit centered title)
+		c.setFont("Helvetica", 11)
+		y_local = height-150
+		c.drawString(40, y_local, f"Teacher ID: {teacher.teacher_id}")
+		c.drawString(250, y_local, f"Teacher Name: {teacher.full_name}")
+		y_local -= 18
+		c.drawString(40, y_local, f"Bank Account Name: {teacher.bank_account_name or ''}")
+		c.drawString(250, y_local, f"Bank Name: {teacher.bank_branch_name or ''}")
+		y_local -= 18
+		c.drawString(40, y_local, f"Branch Name: {teacher.bank_branch_name or ''}")
+		c.drawString(250, y_local, f"UPI ID: {teacher.upiid or ''}")
+		y_local -= 18
+		c.drawString(40, y_local, f"IFSC Code: {teacher.ifsc_code or ''}")
+
+		# divider and table_top match full header calculations
+		divider_y_local = y_local - 10
 		table_top_local = divider_y_local - 18
 		left_x = 40
 		right_x = width - 40
