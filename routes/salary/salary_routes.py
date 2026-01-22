@@ -7,6 +7,7 @@ from models.auth.teacher_models import Teacher
 from services.salary_slip_generator import generate_salary_slip_pdf
 from datetime import datetime
 import os
+from fastapi.responses import FileResponse
 
 router = APIRouter(prefix="/api/salary-slips", tags=["Salary Slips"])
 
@@ -144,6 +145,19 @@ def get_salary_slip_by_id(id: int, db: Session = Depends(get_db)):
 	if not slip:
 		raise HTTPException(status_code=404, detail="Salary slip not found")
 	return slip
+
+
+# GET: Serve teacher's shared salary PDF
+@router.get("/view/{teacher_id}")
+def view_salary_pdf(teacher_id: str, db: Session = Depends(get_db)):
+	# Try to obtain a slip for the teacher to read the shared pdf_path
+	slip = db.query(SalarySlip).filter_by(teacher_id=teacher_id).order_by(SalarySlip.created_at.desc()).first()
+	if not slip or not slip.pdf_path:
+		raise HTTPException(status_code=404, detail="Salary PDF not found")
+	pdf_path = slip.pdf_path
+	if not os.path.exists(pdf_path):
+		raise HTTPException(status_code=404, detail="Salary PDF file missing on disk")
+	return FileResponse(path=pdf_path, media_type="application/pdf", filename=os.path.basename(pdf_path))
 
 # PUT: Update by id
 @router.put("/put-by/{id}", response_model=SalarySlipOut)
