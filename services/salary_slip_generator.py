@@ -85,16 +85,25 @@ def generate_salary_slip_pdf(pdf_path, teacher, slips: list):
 	data = [header]
 	for s in slips:
 		month_label = f"{s.get('month')} {s.get('year')}"
+		# ensure numeric components and recompute total to avoid overrides
+		basic = float(s.get('basic_salary') or 0)
+		da_amt = float(s.get('da_amount') or 0)
+		pa_amt = float(s.get('pa_amount') or 0)
+		deductions_amt = float(s.get('deductions') or 0)
+		pf_amt = float(s.get('pf_amount') or 0)
+		si_amt = float(s.get('si_amount') or 0)
+		total_amt = basic + da_amt + pa_amt - pf_amt - si_amt - deductions_amt
+
 		row = [
 			month_label,
-			fmt(s.get('basic_salary')),
-			fmt(s.get('da_amount')),
-			fmt(s.get('pa_amount')),
-			fmt(s.get('deductions')),
-			fmt(s.get('pf_amount')),
-			fmt(s.get('si_amount')),
+			fmt(basic),
+			fmt(da_amt),
+			fmt(pa_amt),
+			fmt(deductions_amt),
+			fmt(pf_amt),
+			fmt(si_amt),
 			str(s.get('transaction_id') or ""),
-			fmt(s.get('total_amount')),
+			fmt(total_amt),
 		]
 		data.append(row)
 
@@ -102,6 +111,14 @@ def generate_salary_slip_pdf(pdf_path, teacher, slips: list):
 	total_width = width - 120
 	col_widths = [total_width * 0.16, total_width * 0.12, total_width * 0.10, total_width * 0.10,
 				  total_width * 0.10, total_width * 0.10, total_width * 0.10, total_width * 0.14, total_width * 0.08]
+
+	# draw a divider line above the table
+	divider_y = y - 20
+	left_x = 40
+	right_x = width - 40
+	c.setStrokeColor(colors.grey)
+	c.setLineWidth(1)
+	c.line(left_x, divider_y, right_x, divider_y)
 
 	table = Table(data, colWidths=col_widths)
 	table.setStyle(TableStyle([
