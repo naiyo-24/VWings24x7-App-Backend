@@ -45,6 +45,7 @@ from models.admission import admission_enquiry_models
 from models.ads import ads_models
 from models.announcement import announcement_models
 from models.salary import salary_models
+from models.classroom import classroom_models
 
 # Function to create all tables
 def create_tables():
