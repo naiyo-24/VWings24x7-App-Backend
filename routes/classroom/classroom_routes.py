@@ -235,3 +235,48 @@ def delete_classrooms_bulk(request: BulkDeleteRequest, db: Session = Depends(get
             deleted += 1
     db.commit()
     return {"message": f"Deleted {deleted} classrooms"}
+
+# Remove students from classroom endpoint
+class RemoveStudentsRequest(BaseModel):
+    student_ids: List[str]
+
+
+@router.post("/remove-students/{class_id}")
+def remove_students_from_class(
+    class_id: str,
+    body: RemoveStudentsRequest,
+    requester_id: str,
+    db: Session = Depends(get_db),
+):
+    """Remove one or more student IDs from a classroom.
+
+    - `requester_id` must be the class `admin_id` or one of the `teacher_ids`.
+    - `body.student_ids` is a JSON array of student IDs to remove.
+    """
+    classroom = db.query(Classroom).filter(Classroom.class_id == class_id).first()
+    if not classroom:
+        raise HTTPException(status_code=404, detail="Classroom not found")
+
+    # authorize: must be admin or teacher for this class
+    is_admin = classroom.admin_id == requester_id
+    is_teacher = bool(classroom.teacher_ids and requester_id in (classroom.teacher_ids or []))
+    if not (is_admin or is_teacher):
+        raise HTTPException(status_code=403, detail="Not authorized to remove students from this classroom")
+
+    existing = classroom.student_ids or []
+    removed = []
+    for sid in body.student_ids:
+        if sid in existing:
+            existing.remove(sid)
+            removed.append(sid)
+
+    # perform direct update to ensure DB value is overwritten
+    db.query(Classroom).filter(Classroom.class_id == class_id).update({
+        Classroom.student_ids: existing,
+        Classroom.updated_at: datetime.utcnow()
+    })
+    db.commit()
+
+    # return canonical current state
+    updated = db.query(Classroom).filter(Classroom.class_id == class_id).first()
+    return {"class_id": class_id, "removed": removed, "remaining_count": len(updated.student_ids or [])}
