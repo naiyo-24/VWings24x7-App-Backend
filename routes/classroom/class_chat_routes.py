@@ -108,7 +108,19 @@ async def websocket_chat(websocket: WebSocket, class_id: str, user_id: str = Non
     db = SessionLocal()
     try:
         while True:
-            data = await websocket.receive_text()
+            try:
+                data = await websocket.receive_text()
+            except WebSocketDisconnect:
+                manager.disconnect(class_id, websocket)
+                break
+            except RuntimeError:
+                # websocket not connected or accept not completed on client side
+                manager.disconnect(class_id, websocket)
+                break
+            except Exception:
+                # other receive errors: stop handling this connection
+                manager.disconnect(class_id, websocket)
+                break
             # expect JSON messages from client
             try:
                 payload = json.loads(data)
@@ -127,9 +139,22 @@ async def websocket_chat(websocket: WebSocket, class_id: str, user_id: str = Non
                 continue
 
             # only admins (class admin or teacher) can send; others can only receive
-            if not is_admin_or_teacher_for_class(db, class_id, sender_id):
-                await websocket.send_text(json.dumps({"error": "not authorized to send messages"}))
+            # Allow sending by:
+            # - admins (class admin)
+            # - teachers listed in classroom.teacher_ids
+            # - students only if they are members of the classroom
+            cls = db.query(Classroom).filter(Classroom.class_id == class_id).first()
+            if not cls:
+                await websocket.send_text(json.dumps({"error": "class not found"}))
                 continue
+            if sender_role == "student":
+                if not cls.student_ids or sender_id not in (cls.student_ids or []):
+                    await websocket.send_text(json.dumps({"error": "student not a member"}))
+                    continue
+            else:
+                if not is_admin_or_teacher_for_class(db, class_id, sender_id):
+                    await websocket.send_text(json.dumps({"error": "not authorized to send messages"}))
+                    continue
 
             # persist message
             msg = ClassChatMessage(
@@ -178,3 +203,71 @@ def delete_message(class_id: str, message_id: str, requester_id: str, db: Sessio
 
     threading.Thread(target=_broadcast_del, daemon=True).start()
     return {"message": "deleted", "message_id": message_id}
+
+
+# Student-specific endpoints
+@router.get("/student/{class_id}/messages", response_model=List[dict])
+def student_get_messages(class_id: str, student_id: str, db: Session = Depends(get_db)):
+    """Return chat messages for a class — student must be a member to view."""
+    cls = db.query(Classroom).filter(Classroom.class_id == class_id).first()
+    if not cls:
+        raise HTTPException(status_code=404, detail="Classroom not found")
+    if not cls.student_ids or student_id not in (cls.student_ids or []):
+        raise HTTPException(status_code=403, detail="Student not a member of this classroom")
+    msgs = db.query(ClassChatMessage).filter(ClassChatMessage.class_id == class_id).order_by(ClassChatMessage.created_at.asc()).all()
+    return [
+        {
+            "message_id": m.message_id,
+            "class_id": m.class_id,
+            "sender_id": m.sender_id,
+            "sender_role": m.sender_role,
+            "content": m.content,
+            "created_at": m.created_at,
+        }
+        for m in msgs
+    ]
+
+
+@router.post("/student/{class_id}/messages")
+def student_post_message(class_id: str, payload: dict, student_id: str, allow: bool = False, db: Session = Depends(get_db)):
+    """Student attempts to post a message. By default POST is rejected (students cannot chat).
+
+    Pass `?allow=true` to permit posting (useful for testing or if policy changes).
+    """
+    cls = db.query(Classroom).filter(Classroom.class_id == class_id).first()
+    if not cls:
+        raise HTTPException(status_code=404, detail="Classroom not found")
+    if not cls.student_ids or student_id not in (cls.student_ids or []):
+        raise HTTPException(status_code=403, detail="Student not a member of this classroom")
+
+    if not allow:
+        raise HTTPException(status_code=403, detail="Students are not allowed to post messages")
+
+    # allow==True -> persist message as student
+    content = payload.get("content")
+    if not content:
+        raise HTTPException(status_code=400, detail="content required")
+    msg = ClassChatMessage(
+        class_id=class_id,
+        sender_id=student_id,
+        sender_role="student",
+        content=content,
+        created_at=datetime.utcnow(),
+    )
+    db.add(msg)
+    db.commit()
+    db.refresh(msg)
+
+    # broadcast in background
+    def _broadcast_student():
+        asyncio.run(manager.broadcast(class_id, {
+            "message_id": msg.message_id,
+            "class_id": msg.class_id,
+            "sender_id": msg.sender_id,
+            "sender_role": msg.sender_role,
+            "content": msg.content,
+            "created_at": msg.created_at.isoformat(),
+        }))
+
+    threading.Thread(target=_broadcast_student, daemon=True).start()
+    return {"message_id": msg.message_id}
