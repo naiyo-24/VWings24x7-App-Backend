@@ -6,6 +6,8 @@ from models.classroom.class_chat_models import ClassChatMessage
 from models.classroom.classroom_models import Classroom
 from datetime import datetime
 import json
+import threading
+import asyncio
 
 router = APIRouter(prefix="/api/classrooms", tags=["ClassroomChat"])
 
@@ -84,17 +86,18 @@ def post_message(class_id: str, payload: dict, db: Session = Depends(get_db)):
     db.add(msg)
     db.commit()
     db.refresh(msg)
-    # broadcast to websocket clients
-    import asyncio
+    # broadcast to websocket clients in a background thread to avoid "no running event loop"
+    def _broadcast():
+        asyncio.run(manager.broadcast(class_id, {
+            "message_id": msg.message_id,
+            "class_id": msg.class_id,
+            "sender_id": msg.sender_id,
+            "sender_role": msg.sender_role,
+            "content": msg.content,
+            "created_at": msg.created_at.isoformat(),
+        }))
 
-    asyncio.create_task(manager.broadcast(class_id, {
-        "message_id": msg.message_id,
-        "class_id": msg.class_id,
-        "sender_id": msg.sender_id,
-        "sender_role": msg.sender_role,
-        "content": msg.content,
-        "created_at": msg.created_at.isoformat(),
-    }))
+    threading.Thread(target=_broadcast, daemon=True).start()
     return {"message_id": msg.message_id}
 
 # WebSocket endpoint for real-time chat
@@ -170,7 +173,8 @@ def delete_message(class_id: str, message_id: str, requester_id: str, db: Sessio
     db.delete(msg)
     db.commit()
     # broadcast deletion event so clients can remove message locally
-    import asyncio
+    def _broadcast_del():
+        asyncio.run(manager.broadcast(class_id, {"deleted_message_id": message_id}))
 
-    asyncio.create_task(manager.broadcast(class_id, {"deleted_message_id": message_id}))
+    threading.Thread(target=_broadcast_del, daemon=True).start()
     return {"message": "deleted", "message_id": message_id}

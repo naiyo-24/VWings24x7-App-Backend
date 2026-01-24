@@ -131,7 +131,7 @@ def generate_salary_slip_pdf(pdf_path, teacher, slips: list):
 		"PF",
 		"SI",
 		"Transaction ID",
-		"Total Credited",
+		"Total",
 	]
 
 	data = [header]
