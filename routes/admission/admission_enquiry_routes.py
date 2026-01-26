@@ -119,7 +119,13 @@ def create_admission_enquiry(payload: AdmissionEnquiryCreate, db: Session = Depe
     db.add(enq)
     db.commit()
     db.refresh(enq)
-    return enq
+    data = {k: v for k, v in enq.__dict__.items() if not k.startswith("_")}
+    course = db.query(Course).filter_by(course_id=data.get("course_id")).first() if data.get("course_id") else None
+    counsellor = db.query(Counsellor).filter_by(counsellor_id=data.get("counsellor_id")).first() if data.get("counsellor_id") else None
+    data["course_name"] = course.course_name if course else None
+    data["counsellor_name"] = counsellor.full_name if counsellor and hasattr(counsellor, "full_name") else None
+    data["course_category"] = data.get("course_category")
+    return data
 
 
 @router.get("/get-all", response_model=List[AdmissionEnquiryResponse])
@@ -230,7 +236,13 @@ def update_enquiry(enquiry_id: str, payload: AdmissionEnquiryUpdate, db: Session
     db.add(item)
     db.commit()
     db.refresh(item)
-    return item
+    data = {k: v for k, v in item.__dict__.items() if not k.startswith("_")}
+    course = db.query(Course).filter_by(course_id=data.get("course_id")).first() if data.get("course_id") else None
+    counsellor = db.query(Counsellor).filter_by(counsellor_id=data.get("counsellor_id") ).first() if data.get("counsellor_id") else None
+    data["course_name"] = course.course_name if course else None
+    data["counsellor_name"] = counsellor.full_name if counsellor and hasattr(counsellor, "full_name") else None
+    data["course_category"] = data.get("course_category")
+    return data
 
 
 @router.delete("/delete-by/{enquiry_id}", response_model=dict)
