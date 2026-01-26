@@ -47,6 +47,10 @@ class StudentUpdate(BaseModel):
 	password: Optional[str] = None
 	profile_photo: Optional[str] = None
 
+class LoginRequest(BaseModel):
+	email: EmailStr
+	password: str
+
 class StudentOut(StudentBase):
 	student_id: str
 	created_at: datetime
@@ -126,6 +130,22 @@ async def create_student(
 		**db_student.__dict__,
 		course_name=course.course_name
 	)
+
+# Login student
+@router.post("/login", response_model=StudentOut)
+def login_student(request: LoginRequest, db: Session = Depends(get_db)):
+	student = db.query(Student).filter_by(email=request.email).first()
+	if not student or student.password != request.password:
+		raise HTTPException(status_code=401, detail="Invalid credentials.")
+	course = db.query(Course).filter_by(course_id=student.course_availing).first()
+	course_name = course.course_name if course else None
+	profile_photo_path = None
+	if student.profile_photo:
+		try:
+			profile_photo_path = os.path.relpath(str(Path(student.profile_photo)), os.getcwd())
+		except Exception:
+			profile_photo_path = student.profile_photo
+	return StudentOut(**{**student.__dict__, "profile_photo": profile_photo_path}, course_name=course_name)
 
 # Get all students
 @router.get("/get-all", response_model=List[StudentOut])
