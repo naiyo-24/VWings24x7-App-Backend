@@ -20,6 +20,9 @@ class Commission(Base):
 
     pdf_path = Column(String, nullable=True)
 
+    transaction_id = Column(String, nullable=True)
+    payment_status = Column(String, nullable=True, default='pending')
+
     month_year = Column(String, nullable=False)  # format YYYY-MM
 
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)

@@ -11,7 +11,7 @@ from models.commission.commission_models import Commission
 from models.auth.counsellor_models import Counsellor
 from models.courses.course_models import Course
 from models.admission.admission_enquiry_models import AdmissionEnquiry
-from services.commission_pdf_generator import generate_commission_pdf
+from services.commission_pdf_generator import generate_commission_pdf, generate_monthly_commission_pdf
 from routes.auth.counsellor_routes import format_per_courses_commission_for_output
 
 router = APIRouter(prefix="/api/commissions", tags=["Commissions"])
@@ -28,9 +28,19 @@ class CommissionOut(BaseModel):
     course_fees: float
     commission_amount: float
     pdf_path: Optional[str]
+    transaction_id: Optional[str]
+    payment_status: Optional[str]
     month_year: str
     created_at: datetime
     updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class CommissionUpdate(BaseModel):
+    transaction_id: Optional[str] = None
+    payment_status: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -40,6 +50,43 @@ def create_commission_for_enquiry(enquiry: AdmissionEnquiry, db: Session) -> Opt
     # build commission using enquiry + counsellor config
     if not enquiry or not enquiry.counsellor_id:
         return None
+
+    # If a commission for this enquiry already exists, update and reuse it (idempotent)
+    existing = db.query(Commission).filter_by(enquiry_id=enquiry.enquiry_id).first()
+    if existing:
+        # update basic fields in case something changed
+        existing.student_name = enquiry.student_name
+        existing.course_id = enquiry.course_id
+        existing.course_name = (db.query(Course).filter_by(course_id=enquiry.course_id).first().course_name
+                                 if enquiry.course_id else None)
+        existing.updated_at = datetime.utcnow()
+        db.add(existing)
+        db.commit()
+
+        # regenerate monthly consolidated PDF and return path
+        uploads_dir = os.path.join('uploads', 'commission', existing.counsellor_id, existing.month_year)
+        all_comms = db.query(Commission).filter_by(counsellor_id=existing.counsellor_id, month_year=existing.month_year).all()
+        comm_dicts = [
+            {
+                'commission_id': c.commission_id,
+                'enquiry_id': c.enquiry_id,
+                'student_name': c.student_name,
+                'course_id': c.course_id,
+                'course_name': c.course_name,
+                'commission_percentage': c.commission_percentage,
+                'course_fees': c.course_fees,
+                'commission_amount': c.commission_amount,
+                'month_year': c.month_year,
+            }
+            for c in all_comms
+        ]
+        monthly_pdf_path = generate_monthly_commission_pdf(uploads_dir, {'counsellor_id': existing.counsellor_id}, comm_dicts, existing.month_year)
+        rel = os.path.relpath(monthly_pdf_path, os.getcwd())
+        for cobj in all_comms:
+            cobj.pdf_path = rel
+            db.add(cobj)
+        db.commit()
+        return rel
 
     counsellor = db.query(Counsellor).filter_by(counsellor_id=enquiry.counsellor_id).first()
     course = db.query(Course).filter_by(course_id=enquiry.course_id).first() if enquiry.course_id else None
@@ -76,6 +123,8 @@ def create_commission_for_enquiry(enquiry: AdmissionEnquiry, db: Session) -> Opt
         commission_percentage=commission_pct,
         course_fees=course_fees,
         commission_amount=commission_amount,
+        transaction_id=None,
+        payment_status='pending',
         month_year=month_year,
         created_at=datetime.utcnow(),
         updated_at=datetime.utcnow(),
@@ -84,26 +133,36 @@ def create_commission_for_enquiry(enquiry: AdmissionEnquiry, db: Session) -> Opt
     db.commit()
     db.refresh(comm)
 
-    # generate pdf into uploads/commission/{counsellor_id}/{YYYY-MM}/
+    # regenerate consolidated monthly PDF for this counsellor/month and update all related commissions
     uploads_dir = os.path.join('uploads', 'commission', comm.counsellor_id, comm.month_year)
-    pdf_path = generate_commission_pdf(uploads_dir, {
-        'commission_id': comm.commission_id,
-        'student_name': comm.student_name,
-        'enquiry_id': comm.enquiry_id,
-        'course_id': comm.course_id,
-        'course_name': comm.course_name,
-        'commission_percentage': comm.commission_percentage,
-        'course_fees': comm.course_fees,
-        'commission_amount': comm.commission_amount,
-        'month_year': comm.month_year,
-    })
+    # fetch all commissions for this counsellor and month
+    all_comms = db.query(Commission).filter_by(counsellor_id=comm.counsellor_id, month_year=comm.month_year).all()
+    # prepare list of dicts
+    comm_dicts = [
+        {
+            'commission_id': c.commission_id,
+            'enquiry_id': c.enquiry_id,
+            'student_name': c.student_name,
+            'course_id': c.course_id,
+            'course_name': c.course_name,
+            'commission_percentage': c.commission_percentage,
+            'course_fees': c.course_fees,
+            'commission_amount': c.commission_amount,
+            'month_year': c.month_year,
+        }
+        for c in all_comms
+    ]
 
-    rel = os.path.relpath(pdf_path, os.getcwd())
-    comm.pdf_path = rel
-    db.add(comm)
+    monthly_pdf_path = generate_monthly_commission_pdf(uploads_dir, {'counsellor_id': comm.counsellor_id}, comm_dicts, comm.month_year)
+    rel = os.path.relpath(monthly_pdf_path, os.getcwd())
+
+    # update pdf_path on all commissions in this month
+    for cobj in all_comms:
+        cobj.pdf_path = rel
+        db.add(cobj)
     db.commit()
+    # refresh current commission and return path
     db.refresh(comm)
-
     return rel
 
 
@@ -122,3 +181,19 @@ def get_commissions_by_counsellor(counsellor_id: str, month: Optional[str] = Non
         q = q.filter_by(month_year=month)
     items = q.all()
     return [CommissionOut(**i.__dict__) for i in items]
+
+
+@router.put('/update/{commission_id}', response_model=CommissionOut)
+def update_commission(commission_id: str, payload: CommissionUpdate, db: Session = Depends(get_db)):
+    c = db.query(Commission).filter_by(commission_id=commission_id).first()
+    if not c:
+        raise HTTPException(status_code=404, detail='Commission not found')
+    if payload.transaction_id is not None:
+        c.transaction_id = payload.transaction_id
+    if payload.payment_status is not None:
+        c.payment_status = payload.payment_status
+    c.updated_at = datetime.utcnow()
+    db.add(c)
+    db.commit()
+    db.refresh(c)
+    return CommissionOut(**c.__dict__)
