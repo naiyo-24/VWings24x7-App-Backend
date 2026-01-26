@@ -30,6 +30,9 @@ class AdmissionEnquiry(Base):
     # optional course reference
     course_id = Column(String, ForeignKey("courses.course_id"), nullable=True, index=True)
 
+    # category of course for this enquiry: 'general' or 'executive'
+    course_category = Column(String, nullable=True, default="general")
+
     status = Column(String, nullable=False, default="pending")  # converted/contacted/cancelled/pending
 
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)

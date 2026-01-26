@@ -21,6 +21,7 @@ class AdmissionEnquiryBase(BaseModel):
     student_email: Optional[EmailStr] = None
     student_address: Optional[str] = None
     course_id: str
+    course_category: Optional[str] = "general"
     guardian_name: Optional[str] = None
     guardian_phn_no: Optional[str] = None
     fit_medically: Optional[bool] = False
@@ -51,6 +52,7 @@ class AdmissionEnquiryUpdate(BaseModel):
     counsellor_id: Optional[str] = None
     admission_code: Optional[str] = None
     course_id: Optional[str] = None
+    course_category: Optional[str] = None
     status: Optional[str] = None
 
 
@@ -60,6 +62,7 @@ class AdmissionEnquiryResponse(AdmissionEnquiryBase):
     updated_at: datetime
     course_name: Optional[str] = None
     counsellor_name: Optional[str] = None
+    course_category: Optional[str] = "general"
 
     class Config:
         from_attributes = True
@@ -108,6 +111,7 @@ def create_admission_enquiry(payload: AdmissionEnquiryCreate, db: Session = Depe
         meets_vision_standards=payload.meets_vision_standards or False,
         admission_code=payload.admission_code,
         course_id=payload.course_id,
+        course_category=payload.course_category if hasattr(payload, 'course_category') else None,
         status=payload.status if payload.status else "pending",
         created_at=now,
         updated_at=now,
@@ -129,6 +133,8 @@ def get_all_enquiries(db: Session = Depends(get_db)):
         counsellor = db.query(Counsellor).filter_by(counsellor_id=data.get("counsellor_id")).first() if data.get("counsellor_id") else None
         data["course_name"] = course.course_name if course else None
         data["counsellor_name"] = counsellor.full_name if counsellor and hasattr(counsellor, "full_name") else None
+        # ensure course_category present (fallback handled by model default)
+        data["course_category"] = data.get("course_category")
         result.append(data)
     return result
 
@@ -144,6 +150,7 @@ def get_enquiry(enquiry_id: str, db: Session = Depends(get_db)):
     counsellor = db.query(Counsellor).filter_by(counsellor_id=data.get("counsellor_id")).first() if data.get("counsellor_id") else None
     data["course_name"] = course.course_name if course else None
     data["counsellor_name"] = counsellor.full_name if counsellor and hasattr(counsellor, "full_name") else None
+    data["course_category"] = data.get("course_category")
     return data
 
 # Define a separate model for status update
@@ -167,6 +174,7 @@ def update_enquiry_status(enquiry_id: str, payload: AdmissionEnquiryStatusUpdate
     counsellor = db.query(Counsellor).filter_by(counsellor_id=data.get("counsellor_id")).first() if data.get("counsellor_id") else None
     data["course_name"] = course.course_name if course else None
     data["counsellor_name"] = counsellor.full_name if counsellor and hasattr(counsellor, "full_name") else None
+    data["course_category"] = data.get("course_category")
     return data
 
 # Full update of enquiry by ID
@@ -195,6 +203,9 @@ def update_enquiry(enquiry_id: str, payload: AdmissionEnquiryUpdate, db: Session
             if not course:
                 raise HTTPException(status_code=404, detail="Course not found")
         item.course_id = payload.course_id
+
+    if payload.course_category is not None:
+        item.course_category = payload.course_category
 
     # if counsellor is being changed but admission_code remains, ensure existing code belongs to new counsellor
     if payload.counsellor_id is not None:
