@@ -76,11 +76,22 @@ def create_commission_for_enquiry(enquiry: AdmissionEnquiry, db: Session) -> Opt
                 'commission_percentage': c.commission_percentage,
                 'course_fees': c.course_fees,
                 'commission_amount': c.commission_amount,
+                'transaction_id': c.transaction_id,
+                'payment_status': c.payment_status,
                 'month_year': c.month_year,
             }
             for c in all_comms
         ]
-        monthly_pdf_path = generate_monthly_commission_pdf(uploads_dir, {'counsellor_id': existing.counsellor_id}, comm_dicts, existing.month_year)
+        # include counsellor details for header
+        counsellor_obj = db.query(Counsellor).filter_by(counsellor_id=existing.counsellor_id).first()
+        counsellor_info = {
+            'counsellor_id': existing.counsellor_id,
+            'full_name': getattr(counsellor_obj, 'full_name', None),
+            'phone_no': getattr(counsellor_obj, 'phone_no', None),
+            'email': getattr(counsellor_obj, 'email', None),
+            'address': getattr(counsellor_obj, 'address', None),
+        }
+        monthly_pdf_path = generate_monthly_commission_pdf(uploads_dir, counsellor_info, comm_dicts, existing.month_year)
         rel = os.path.relpath(monthly_pdf_path, os.getcwd())
         for cobj in all_comms:
             cobj.pdf_path = rel
@@ -148,12 +159,22 @@ def create_commission_for_enquiry(enquiry: AdmissionEnquiry, db: Session) -> Opt
             'commission_percentage': c.commission_percentage,
             'course_fees': c.course_fees,
             'commission_amount': c.commission_amount,
+            'transaction_id': c.transaction_id,
+            'payment_status': c.payment_status,
             'month_year': c.month_year,
         }
         for c in all_comms
     ]
 
-    monthly_pdf_path = generate_monthly_commission_pdf(uploads_dir, {'counsellor_id': comm.counsellor_id}, comm_dicts, comm.month_year)
+    counsellor_obj = db.query(Counsellor).filter_by(counsellor_id=comm.counsellor_id).first()
+    counsellor_info = {
+        'counsellor_id': comm.counsellor_id,
+        'full_name': getattr(counsellor_obj, 'full_name', None),
+        'phone_no': getattr(counsellor_obj, 'phone_no', None),
+        'email': getattr(counsellor_obj, 'email', None),
+        'address': getattr(counsellor_obj, 'address', None),
+    }
+    monthly_pdf_path = generate_monthly_commission_pdf(uploads_dir, counsellor_info, comm_dicts, comm.month_year)
     rel = os.path.relpath(monthly_pdf_path, os.getcwd())
 
     # update pdf_path on all commissions in this month
