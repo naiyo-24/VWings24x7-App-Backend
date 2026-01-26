@@ -30,27 +30,35 @@ def validate_and_get_course_details(db: Session, commission_map: Dict[str, float
     course_by_id = {c.course_id: c for c in courses}
     normalized: Dict[str, Dict[str, Any]] = {}
     for cid, raw_val in commission_map.items():
+        # allow either a numeric value or a dict {"commission": <num>, "course_name": <optional>}
+        payload_course_name = None
+        if isinstance(raw_val, dict):
+            if "commission" not in raw_val:
+                raise HTTPException(status_code=400, detail=f"Missing 'commission' for course {cid}")
+            raw_comm = raw_val.get("commission")
+            payload_course_name = raw_val.get("course_name")
+        else:
+            raw_comm = raw_val
+
         try:
-            if isinstance(raw_val, Decimal):
-                d = raw_val
-            elif isinstance(raw_val, (int, float)):
-                d = Decimal(str(raw_val))
-            elif isinstance(raw_val, str):
-                d = Decimal(raw_val)
+            if isinstance(raw_comm, Decimal):
+                d = raw_comm
+            elif isinstance(raw_comm, (int, float)):
+                d = Decimal(str(raw_comm))
+            elif isinstance(raw_comm, str):
+                d = Decimal(raw_comm)
             else:
                 raise InvalidOperation()
         except InvalidOperation:
-            raise HTTPException(status_code=400, detail=f"Invalid commission value for course {cid}: {raw_val}")
+            raise HTTPException(status_code=400, detail=f"Invalid commission value for course {cid}: {raw_comm}")
 
         if not d.is_finite():
-            raise HTTPException(status_code=400, detail=f"Invalid commission value for course {cid}: {raw_val}")
+            raise HTTPException(status_code=400, detail=f"Invalid commission value for course {cid}: {raw_comm}")
 
         course = course_by_id.get(cid)
-        course_name = course.course_name if course else None
-        normalized[cid] = {
-            "commission": float(d),
-            "course_name": course_name,
-        }
+        # prefer provided course_name in payload if present, otherwise use DB name
+        course_name = payload_course_name if payload_course_name else (course.course_name if course else None)
+        normalized[cid] = {"commission": float(d), "course_name": course_name}
 
     return normalized
 
