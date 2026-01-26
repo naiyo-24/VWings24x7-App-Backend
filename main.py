@@ -14,6 +14,7 @@ from routes.salary import salary_routes
 from routes.classroom import classroom_routes
 from routes.classroom import class_chat_routes
 from routes.fees import fees_routes
+from routes.commission import commission_routes
 
 # Create FastAPI app
 app = FastAPI(
@@ -61,6 +62,7 @@ app.include_router(salary_routes.router)
 app.include_router(classroom_routes.router)
 app.include_router(class_chat_routes.router)
 app.include_router(fees_routes.router)
+app.include_router(commission_routes.router)
 
 # Create database tables on startup
 @app.on_event("startup")

@@ -48,6 +48,7 @@ from models.salary import salary_models
 from models.classroom import classroom_models
 from models.classroom import class_chat_models
 from models.fees import fees_models
+from models.commission import commission_models
 
 # Function to create all tables
 def create_tables():

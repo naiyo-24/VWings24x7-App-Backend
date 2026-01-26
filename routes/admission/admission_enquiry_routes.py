@@ -3,6 +3,7 @@ from pydantic import BaseModel, EmailStr
 from typing import List, Optional
 from sqlalchemy.orm import Session
 from datetime import datetime
+import traceback
 
 from db import get_db
 from models.admission.admission_enquiry_models import AdmissionEnquiry
@@ -10,6 +11,7 @@ from models.auth.counsellor_models import Counsellor
 from models.admission.admission_code_models import AdmissionCode
 from models.courses.course_models import Course
 from services.admission_enquiry_id_generator import generate_admission_enquiry_id
+from routes.commission.commission_routes import create_commission_for_enquiry
 
 router = APIRouter(prefix="/api/admission-enquiries", tags=["AdmissionEnquiries"])
 
@@ -125,6 +127,7 @@ def create_admission_enquiry(payload: AdmissionEnquiryCreate, db: Session = Depe
     data["course_name"] = course.course_name if course else None
     data["counsellor_name"] = counsellor.full_name if counsellor and hasattr(counsellor, "full_name") else None
     data["course_category"] = data.get("course_category")
+    print("update_enquiry_status returning data keys:", list(data.keys()))
     return data
 
 
@@ -174,14 +177,47 @@ def update_enquiry_status(enquiry_id: str, payload: AdmissionEnquiryStatusUpdate
     db.add(item)
     db.commit()
     db.refresh(item)
-    # Attach course_name and counsellor_name for response
-    data = {k: v for k, v in item.__dict__.items() if not k.startswith("_")}
-    course = db.query(Course).filter_by(course_id=data.get("course_id")).first() if data.get("course_id") else None
-    counsellor = db.query(Counsellor).filter_by(counsellor_id=data.get("counsellor_id")).first() if data.get("counsellor_id") else None
-    data["course_name"] = course.course_name if course else None
-    data["counsellor_name"] = counsellor.full_name if counsellor and hasattr(counsellor, "full_name") else None
-    data["course_category"] = data.get("course_category")
-    return data
+    # If enquiry converted, create commission record and pdf
+    try:
+        if payload.status and payload.status.lower() == 'converted':
+            try:
+                create_commission_for_enquiry(item, db)
+            except Exception as e:
+                # don't block status update on commission generation failure; log the error
+                print("Commission generation failed:", e)
+                traceback.print_exc()
+    except Exception as e:
+        print("Unexpected error during commission creation:", e)
+        traceback.print_exc()
+    # Build explicit response dict to satisfy response_model
+    course = db.query(Course).filter_by(course_id=item.course_id).first() if item.course_id else None
+    counsellor = db.query(Counsellor).filter_by(counsellor_id=item.counsellor_id).first() if item.counsellor_id else None
+
+    resp = {
+        "student_name": item.student_name,
+        "student_phn_no": item.student_phn_no,
+        "student_alternative_phn_no": item.student_alternative_phn_no,
+        "student_email": item.student_email,
+        "student_address": item.student_address,
+        "course_id": item.course_id,
+        "course_category": item.course_category,
+        "guardian_name": item.guardian_name,
+        "guardian_phn_no": item.guardian_phn_no,
+        "fit_medically": item.fit_medically,
+        "meets_height_requirements": item.meets_height_requirements,
+        "meets_weight_requirements": item.meets_weight_requirements,
+        "meets_vision_standards": item.meets_vision_standards,
+        "counsellor_id": item.counsellor_id,
+        "admission_code": item.admission_code,
+        "status": item.status,
+        "enquiry_id": item.enquiry_id,
+        "created_at": item.created_at,
+        "updated_at": item.updated_at,
+        "course_name": course.course_name if course else None,
+        "counsellor_name": counsellor.full_name if counsellor and hasattr(counsellor, "full_name") else None,
+    }
+
+    return resp
 
 # Full update of enquiry by ID
 @router.put("/put-by/{enquiry_id}", response_model=AdmissionEnquiryResponse)
