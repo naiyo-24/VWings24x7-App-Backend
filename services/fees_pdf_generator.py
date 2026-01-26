@@ -36,28 +36,10 @@ def generate_fees_pdf(output_dir: str, fee_data: dict) -> str:
         margin = 20 * mm
         x = margin
         y_top = height - margin
-        logo_path = os.path.join("static", "logo.png")
-        if os.path.exists(logo_path):
-            try:
-                c.drawImage(logo_path, x, y_top - 30 * mm, width=40 * mm, preserveAspectRatio=True, mask='auto')
-            except Exception:
-                pass
-        company_x = x + 45 * mm
-        c.setFont("Helvetica-Bold", 14)
-        c.drawString(company_x, y_top - 10, "VWINGS24X7")
-        c.setFont("Helvetica", 9)
-        c.drawString(company_x, y_top - 26, "A/90, Bapuji Nagar, Regent Estate, Jadavpur, Kolkata - 700092")
-        c.drawString(company_x, y_top - 40, "Phone: +91 9875337521")
-        c.drawString(company_x, y_top - 54, "Email: contact@vwings24x7.com")
+        # use absolute path for static logo
+        logo_path = os.path.join(os.getcwd(), "static", "logo.png")
 
-        # Divider
-        header_y = y_top - 70
-        c.setStrokeColor(colors.grey)
-        c.setLineWidth(0.5)
-        c.line(margin, header_y, width - margin, header_y)
-
-        # watermark centered and rotated, low alpha
-        logo_path = os.path.join("static", "logo.png")
+        # watermark centered and rotated, low alpha (draw first so header is on top)
         if os.path.exists(logo_path):
             try:
                 c.saveState()
@@ -77,6 +59,26 @@ def generate_fees_pdf(output_dir: str, fee_data: dict) -> str:
                     c.restoreState()
                 except Exception:
                     pass
+
+        # header logo and company info (draw on top of watermark)
+        if os.path.exists(logo_path):
+            try:
+                c.drawImage(logo_path, x, y_top - 30 * mm, width=30 * mm, height=30 * mm, preserveAspectRatio=True, mask='auto')
+            except Exception:
+                pass
+        company_x = x + 35 * mm
+        c.setFont("Helvetica-Bold", 14)
+        c.drawString(company_x, y_top - 10, "VWINGS24X7")
+        c.setFont("Helvetica", 9)
+        c.drawString(company_x, y_top - 26, "A/90, Bapuji Nagar, Regent Estate, Jadavpur, Kolkata - 700092")
+        c.drawString(company_x, y_top - 40, "Phone: +91 9875337521")
+        c.drawString(company_x, y_top - 54, "Email: contact@vwings24x7.com")
+
+        # Divider
+        header_y = y_top - 70
+        c.setStrokeColor(colors.grey)
+        c.setLineWidth(0.5)
+        c.line(margin, header_y, width - margin, header_y)
 
         return header_y
 
@@ -158,26 +160,11 @@ def generate_consolidated_fees_pdf(output_dir: str, student: dict, installments:
     margin = 20 * mm
 
     def _draw_header_and_watermark(c):
-        logo_path = os.path.join("static", "logo.png")
+        logo_path = os.path.join(os.getcwd(), "static", "logo.png")
         x = margin
         y_top = height - margin
-        if os.path.exists(logo_path):
-            try:
-                c.drawImage(logo_path, x, y_top - 30 * mm, width=40 * mm, preserveAspectRatio=True, mask='auto')
-            except Exception:
-                pass
-        company_x = x + 45 * mm
-        c.setFont("Helvetica-Bold", 14)
-        c.drawString(company_x, y_top - 10, "VWINGS24X7")
-        c.setFont("Helvetica", 9)
-        c.drawString(company_x, y_top - 26, "A/90, Bapuji Nagar, Regent Estate, Jadavpur, Kolkata - 700092")
-        c.drawString(company_x, y_top - 40, "Phone: +91 9875337521")
-        c.drawString(company_x, y_top - 54, "Email: contact@vwings24x7.com")
-        header_y = y_top - 70
-        c.setStrokeColor(colors.grey)
-        c.setLineWidth(0.5)
-        c.line(margin, header_y, width - margin, header_y)
-        # watermark
+
+        # watermark centered and rotated, low alpha (draw first so header is on top)
         if os.path.exists(logo_path):
             try:
                 c.saveState()
@@ -197,6 +184,24 @@ def generate_consolidated_fees_pdf(output_dir: str, student: dict, installments:
                     c.restoreState()
                 except Exception:
                     pass
+
+        # header logo and company info (draw on top of watermark)
+        if os.path.exists(logo_path):
+            try:
+                c.drawImage(logo_path, x, y_top - 30 * mm, width=30 * mm, height=30 * mm, preserveAspectRatio=True, mask='auto')
+            except Exception:
+                pass
+        company_x = x + 35 * mm
+        c.setFont("Helvetica-Bold", 14)
+        c.drawString(company_x, y_top - 10, "VWINGS24X7")
+        c.setFont("Helvetica", 9)
+        c.drawString(company_x, y_top - 26, "A/90, Bapuji Nagar, Regent Estate, Jadavpur, Kolkata - 700092")
+        c.drawString(company_x, y_top - 40, "Phone: +91 9875337521")
+        c.drawString(company_x, y_top - 54, "Email: contact@vwings24x7.com")
+        header_y = y_top - 70
+        c.setStrokeColor(colors.grey)
+        c.setLineWidth(0.5)
+        c.line(margin, header_y, width - margin, header_y)
         return header_y
 
     header_y = _draw_header_and_watermark(c)
