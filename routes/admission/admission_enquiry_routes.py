@@ -11,7 +11,6 @@ from models.auth.counsellor_models import Counsellor
 from models.admission.admission_code_models import AdmissionCode
 from models.courses.course_models import Course
 from services.admission_enquiry_id_generator import generate_admission_enquiry_id
-from routes.commission.commission_routes import create_commission_for_enquiry
 
 router = APIRouter(prefix="/api/admission-enquiries", tags=["AdmissionEnquiries"])
 
@@ -177,18 +176,6 @@ def update_enquiry_status(enquiry_id: str, payload: AdmissionEnquiryStatusUpdate
     db.add(item)
     db.commit()
     db.refresh(item)
-    # If enquiry converted, create commission record and pdf
-    try:
-        if payload.status and payload.status.lower() == 'converted':
-            try:
-                create_commission_for_enquiry(item, db)
-            except Exception as e:
-                # don't block status update on commission generation failure; log the error
-                print("Commission generation failed:", e)
-                traceback.print_exc()
-    except Exception as e:
-        print("Unexpected error during commission creation:", e)
-        traceback.print_exc()
     # Build explicit response dict to satisfy response_model
     course = db.query(Course).filter_by(course_id=item.course_id).first() if item.course_id else None
     counsellor = db.query(Counsellor).filter_by(counsellor_id=item.counsellor_id).first() if item.counsellor_id else None

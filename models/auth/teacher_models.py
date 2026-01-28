@@ -27,5 +27,8 @@ class Teacher(Base):
 	updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 	password = Column(String, nullable=False)
 
+	# Relationship to salaries
+	salaries = relationship("TeacherSalary", back_populates="teacher")
+
 	def __repr__(self):
 		return f"<Teacher(teacher_id={self.teacher_id}, full_name={self.full_name})>"
