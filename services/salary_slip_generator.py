@@ -100,7 +100,7 @@ def generate_salary_slip(teacher, salaries, output_path):
     # Save as multi-page PDF
     if images:
         first, rest = images[0], images[1:]
-        first.save(output_path, "PDF", resolution=100.0, save_all=True, append_images=rest)
+        first.save(output_path, "PDF", resolution=1000.0, save_all=True, append_images=rest)
 
     for im in images:
         im.close()

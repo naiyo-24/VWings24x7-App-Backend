@@ -1,7 +1,7 @@
 from PIL import Image, ImageDraw, ImageFont
 
 
-def _draw_page(template_path, student, fees, fonts):
+def _draw_page(template_path, student, fees_list, fonts):
     img = Image.open(template_path).convert('RGB')
     draw = ImageDraw.Draw(img)
     font, bold_font, small_font, small_bold_font = fonts
@@ -48,23 +48,25 @@ def _draw_page(template_path, student, fees, fonts):
             draw.line([(x, y + h + 2), (x + w, y + h + 2)], fill="black", width=1)
     y += row_height
 
-    # Single row with fees info
-    data = [
-        str(fees.payment_no or ""),
-        fees.payment_mode or "",
-        fees.transaction_id or "",
-        f"{fees.amount:.2f}",
-        f"{fees.total_course_fees:.2f}",
-        f"{fees.amount_paid:.2f}",
-        f"{fees.amount_due:.2f}"
-    ]
-    for i, value in enumerate(data):
-        draw.text((x_positions[i], y), value, fill="black", font=small_font)
+    # Rows for each payment
+    for fees in fees_list:
+        data = [
+            str(fees.payment_no or ""),
+            fees.payment_mode or "",
+            fees.transaction_id or "",
+            f"{fees.amount:.2f}",
+            f"{fees.total_course_fees:.2f}",
+            f"{fees.amount_paid:.2f}",
+            f"{fees.amount_due:.2f}"
+        ]
+        for i, value in enumerate(data):
+            draw.text((x_positions[i], y), value, fill="black", font=small_font)
+        y += row_height
 
     return img
 
 
-def generate_fees_receipt(student, fees, output_path):
+def generate_fees_receipt(student, fees_list, output_path):
     template_path = "static/fees.jpeg"
 
     try:
@@ -80,8 +82,20 @@ def generate_fees_receipt(student, fees, output_path):
 
     fonts = (font, bold_font, small_font, small_bold_font)
 
-    img = _draw_page(template_path, student, fees, fonts)
+    # Paginate if many rows: reuse approach with max rows per page
+    max_rows_per_page = 20
+    pages = [fees_list[i:i + max_rows_per_page] for i in range(0, len(fees_list), max_rows_per_page)]
+    if not pages:
+        pages = [[]]
 
-    # Save single page PDF
-    img.save(output_path, "PDF", resolution=100.0)
-    img.close()
+    images = []
+    for page in pages:
+        img = _draw_page(template_path, student, page, fonts)
+        images.append(img)
+
+    if images:
+        first, rest = images[0], images[1:]
+        first.save(output_path, "PDF", resolution=1000.0, save_all=True, append_images=rest)
+
+    for im in images:
+        im.close()

@@ -8,7 +8,7 @@ class FeesReceipt(Base):
     __tablename__ = "fees_receipts"
 
     id = Column(Integer, primary_key=True, index=True)
-    student_id = Column(String, ForeignKey("students.student_id"), nullable=False, unique=True)
+    student_id = Column(String, ForeignKey("students.student_id"), nullable=False)
     payment_no = Column(Integer, nullable=True)
     payment_mode = Column(String, nullable=True)
     transaction_id = Column(String, nullable=True)
@@ -19,8 +19,8 @@ class FeesReceipt(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
-    # relationship to Student
-    student = relationship("Student", backref="fees_receipt")
+    # relationship to Student: allow accessing list of payments via `fees`
+    student = relationship("Student", backref="fees")
 
     def __repr__(self):
         return f"<FeesReceipt(id={self.id}, student_id={self.student_id}, amount_paid={self.amount_paid})>"
