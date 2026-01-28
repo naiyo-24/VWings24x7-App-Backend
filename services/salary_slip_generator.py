@@ -19,21 +19,33 @@ def _draw_page(template_path, teacher, salaries_page, fonts):
         f"IFSC: {teacher.ifsc_code}",
         f"UPI ID: {teacher.upiid}"
     ]
+    # use a larger bold font for teacher details
+    teacher_font = bold_font
     for i in range(4):
-        draw.text((left_x, y), details[i], fill="black", font=small_font)
-        draw.text((right_x, y), details[i+4], fill="black", font=small_font)
-        y += 25
+        draw.text((left_x, y), details[i], fill="black", font=teacher_font)
+        draw.text((right_x, y), details[i+4], fill="black", font=teacher_font)
+        y += 28
 
     # Divider
     draw.line([(50, y), (img.width - 50, y)], fill="black", width=2)
     y += 20
 
-    # Table header (includes Loss of Pay column)
+    # Table header (includes Loss of Pay column) - bold + underlined
     table_headers = ["Month", "Year", "Basic Salary", "PF", "SI", "DA", "PA", "Loss of Pay", "Total Salary", "Transaction ID"]
     x_positions = [50, 120, 180, 250, 300, 350, 400, 450, 520, 620]
+    row_height = 28
     for i, header in enumerate(table_headers):
-        draw.text((x_positions[i], y), header, fill="black", font=small_bold_font)
-    y += 25
+        x = x_positions[i]
+        draw.text((x, y), header, fill="black", font=small_bold_font)
+        # underline header
+        try:
+            bbox = draw.textbbox((x, y), header, font=small_bold_font)
+            ux0, uy0, ux1, uy1 = bbox
+            draw.line([(ux0, uy1 + 2), (ux1, uy1 + 2)], fill="black", width=1)
+        except Exception:
+            w, h = small_bold_font.getsize(header)
+            draw.line([(x, y + h + 2), (x + w, y + h + 2)], fill="black", width=1)
+    y += row_height
 
     # Table data for each salary on this page
     for salary in salaries_page:
@@ -51,7 +63,7 @@ def _draw_page(template_path, teacher, salaries_page, fonts):
         ]
         for i, value in enumerate(data):
             draw.text((x_positions[i], y), value, fill="black", font=small_font)
-        y += 25
+        y += row_height
 
     return img
 
