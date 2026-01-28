@@ -15,6 +15,7 @@ class TeacherSalary(Base):
     si = Column(Float, nullable=False)
     da = Column(Float, nullable=False)
     pa = Column(Float, nullable=False)
+    loss_of_pay = Column(Float, nullable=False, default=0.0)
     total_salary = Column(Float, nullable=False)
     transaction_id = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)

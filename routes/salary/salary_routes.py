@@ -36,6 +36,7 @@ class SalaryBase(BaseModel):
     si: float
     da: float
     pa: float
+    loss_of_pay: float
     total_salary: float
     transaction_id: Optional[str] = None
 
@@ -50,6 +51,7 @@ class SalaryUpdate(BaseModel):
     si: Optional[float] = None
     da: Optional[float] = None
     pa: Optional[float] = None
+    loss_of_pay: Optional[float] = None
     total_salary: Optional[float] = None
     transaction_id: Optional[str] = None
 
@@ -107,7 +109,7 @@ def create_salary_slips(salary_data_list: List[SalaryCreate], db: Session = Depe
     
     output_dir = Path("uploads/salary_slips") / teacher_id
     output_dir.mkdir(parents=True, exist_ok=True)
-    output_path = output_dir / f"salary_slip_{teacher_id}_{year}.jpeg"
+    output_path = output_dir / f"salary_slip_{teacher_id}_{year}.pdf"
     generate_salary_slip(teacher, all_salaries, str(output_path))
     
     return created_salaries
@@ -133,7 +135,7 @@ def update_salary_slip(salary_id: int, update_data: SalaryUpdate, db: Session = 
     ).all()
     
     output_dir = Path("uploads/salary_slips") / salary.teacher_id
-    output_path = output_dir / f"salary_slip_{salary.teacher_id}_{salary.year}.jpeg"
+    output_path = output_dir / f"salary_slip_{salary.teacher_id}_{salary.year}.pdf"
     generate_salary_slip(teacher, all_salaries, str(output_path))
     
     return salary
@@ -165,7 +167,7 @@ def delete_salary_slip(salary_id: int, db: Session = Depends(get_db)):
     ).all()
     
     output_dir = Path("uploads/salary_slips") / teacher_id
-    output_path = output_dir / f"salary_slip_{teacher_id}_{year}.jpeg"
+    output_path = output_dir / f"salary_slip_{teacher_id}_{year}.pdf"
     if all_salaries:
         generate_salary_slip(teacher, all_salaries, str(output_path))
     else:
