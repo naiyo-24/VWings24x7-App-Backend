@@ -12,6 +12,9 @@ from models.courses.course_models import Course
 from services.counsellor_id_generator import generate_counsellor_id
 from pydantic import BaseModel, EmailStr
 from datetime import datetime
+from models.admission.admission_enquiry_models import AdmissionEnquiry
+from models.admission.admission_code_models import AdmissionCode
+from models.commission.commission_models import CommissionSlip
 
 router = APIRouter(prefix="/api/counsellors", tags=["Counsellors"])
 
@@ -396,6 +399,30 @@ def delete_counsellor(counsellor_id: str, db: Session = Depends(get_db)):
     uploads_dir = Path("uploads") / "counsellor" / counsellor_id
     if uploads_dir.exists():
         shutil.rmtree(uploads_dir)
+    # delete related admission enquiries first (they reference admission_code and counsellor)
+    enquiries = db.query(AdmissionEnquiry).filter_by(counsellor_id=counsellor_id).all()
+    for e in enquiries:
+        db.delete(e)
+
+    # delete admission codes associated with this counsellor
+    codes = db.query(AdmissionCode).filter_by(counsellor_id=counsellor_id).all()
+    for ac in codes:
+        db.delete(ac)
+
+    # delete commission slips and their files
+    try:
+        commissions = db.query(CommissionSlip).filter_by(counsellor_id=counsellor_id).all()
+        for cs in commissions:
+            if cs.file_path and Path(cs.file_path).exists():
+                try:
+                    Path(cs.file_path).unlink()
+                except Exception:
+                    pass
+            db.delete(cs)
+    except Exception:
+        # commission model may not exist in older setups; ignore if not present
+        pass
+
     db.delete(counsellor)
     db.commit()
     return {"detail": "Counsellor deleted"}
