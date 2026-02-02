@@ -4,6 +4,7 @@ from typing import List
 from pathlib import Path
 import os
 from datetime import datetime
+from fastapi.responses import FileResponse
 from db import get_db
 from models.fees.fees_models import Fee
 from models.auth.student_models import Student
@@ -100,6 +101,27 @@ def get_fees_by_student(student_id: str, db: Session = Depends(get_db)):
 		}
 		for f in fees
 	]
+
+
+# Download fee PDF by student id and installment no
+@router.get("/download/{student_id}/{installment_no}")
+def download_fee(student_id: str, installment_no: int, db: Session = Depends(get_db)):
+	# Verify student exists
+	student = db.query(Student).filter_by(student_id=student_id).first()
+	if not student:
+		raise HTTPException(status_code=404, detail="Student not found")
+
+	# Get the fee record
+	fee = db.query(Fee).filter_by(student_id=student_id, installment_no=installment_no).first()
+	if not fee:
+		raise HTTPException(status_code=404, detail="Fee not found for this installment")
+
+	# Check if file exists
+	if not os.path.exists(fee.file_path):
+		raise HTTPException(status_code=404, detail="Fee file not found")
+
+	# Return the file
+	return FileResponse(path=fee.file_path, filename=f"fee_{student_id}_{installment_no}.pdf", media_type='application/pdf')
 
 
 # Delete fee by id
