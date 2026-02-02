@@ -225,9 +225,21 @@ async def update_student(
 			raise HTTPException(status_code=404, detail="Course not found.")
 		update_data["course_availing"] = course_availing
 	if interests is not None:
-		update_data["interests"] = json.loads(interests)
+		if interests == "":
+			update_data["interests"] = None
+		else:
+			try:
+				update_data["interests"] = json.loads(interests)
+			except Exception:
+				raise HTTPException(status_code=400, detail="Invalid JSON for interests")
 	if hobbies is not None:
-		update_data["hobbies"] = json.loads(hobbies)
+		if hobbies == "":
+			update_data["hobbies"] = None
+		else:
+			try:
+				update_data["hobbies"] = json.loads(hobbies)
+			except Exception:
+				raise HTTPException(status_code=400, detail="Invalid JSON for hobbies")
 	if password is not None:
 		update_data["password"] = password
 		# Handle profile photo update
