@@ -171,9 +171,8 @@ async def websocket_chat(websocket: WebSocket, class_id: str, user_id: str = Non
                 await websocket.send_text(json.dumps({"error": "class not found"}))
                 continue
             if sender_role == "student":
-                if not cls.student_ids or sender_id not in (cls.student_ids or []):
-                    await websocket.send_text(json.dumps({"error": "student not a member"}))
-                    continue
+                # Allow any student to participate in real-time chat regardless of membership
+                pass
             else:
                 if not is_admin_or_teacher_for_class(db, class_id, sender_id):
                     await websocket.send_text(json.dumps({"error": "not authorized to send messages"}))
@@ -254,21 +253,12 @@ def student_get_messages(class_id: str, student_id: str, db: Session = Depends(g
 
 
 @router.post("/student/{class_id}/messages")
-def student_post_message(class_id: str, payload: dict, student_id: str, allow: bool = False, db: Session = Depends(get_db)):
-    """Student attempts to post a message. By default POST is rejected (students cannot chat).
-
-    Pass `?allow=true` to permit posting (useful for testing or if policy changes).
-    """
+def student_post_message(class_id: str, payload: dict, student_id: str, db: Session = Depends(get_db)):
+    """Student posts a message — students may participate in real-time chat."""
     cls = db.query(Classroom).filter(Classroom.class_id == class_id).first()
     if not cls:
         raise HTTPException(status_code=404, detail="Classroom not found")
-    if not cls.student_ids or student_id not in (cls.student_ids or []):
-        raise HTTPException(status_code=403, detail="Student not a member of this classroom")
 
-    if not allow:
-        raise HTTPException(status_code=403, detail="Students are not allowed to post messages")
-
-    # allow==True -> persist message as student
     content = payload.get("content")
     if not content:
         raise HTTPException(status_code=400, detail="content required")
