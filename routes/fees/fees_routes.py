@@ -4,7 +4,6 @@ from typing import List
 from pathlib import Path
 import os
 from datetime import datetime
-
 from db import get_db
 from models.fees.fees_models import Fee
 from models.auth.student_models import Student

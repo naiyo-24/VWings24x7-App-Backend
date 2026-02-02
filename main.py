@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from db import create_tables
@@ -20,7 +21,9 @@ from routes.fees import fees_routes
 app = FastAPI(
     title="VWINGS24X7 Backend API",
     description="Backend API for Admin Management",
-    version="1.0.0"
+    version="1.0.0",
+    swagger_ui_parameters={"favicon_url": "/static/logo.png"},
+    redoc_favicon_url="/static/logo.png",
 )
 
 # Configure CORS to allow all origins
@@ -32,8 +35,16 @@ app.add_middleware(
     allow_headers=["*"],  # Allows all headers
 )
 
-# Mount /uploads as static files so course videos/photos can be accessed via URL
+# Mount /static and /uploads as static files so assets can be accessed via URL
+app.mount("/static", StaticFiles(directory="static"), name="static")
+# /uploads will serve uploaded files like profile photos, classroom photos, salary slips, fee receipts, etc.
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+
+
+# Serve favicon for browsers requesting /favicon.ico
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon():
+    return FileResponse("static/logo.png")
 
 # Health check endpoint
 @app.get("/health", tags=["Health"])
