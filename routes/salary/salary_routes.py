@@ -4,7 +4,7 @@ from typing import List
 from pathlib import Path
 import os
 from datetime import datetime
-
+from fastapi.responses import FileResponse
 from db import get_db
 from models.salary.salary_models import Salary
 from models.auth.teacher_models import Teacher
@@ -106,6 +106,27 @@ def get_salaries_by_teacher(teacher_id: str, db: Session = Depends(get_db)):
 		}
 		for s in salaries
 	]
+
+
+# Download salary PDF by teacher id, month, and year
+@router.get("/download/{teacher_id}/{month}/{year}")
+def download_salary(teacher_id: str, month: int, year: int, db: Session = Depends(get_db)):
+	# Verify teacher exists
+	teacher = db.query(Teacher).filter_by(teacher_id=teacher_id).first()
+	if not teacher:
+		raise HTTPException(status_code=404, detail="Teacher not found")
+
+	# Get the salary record
+	salary = db.query(Salary).filter_by(teacher_id=teacher_id, month=month, year=year).first()
+	if not salary:
+		raise HTTPException(status_code=404, detail="Salary not found for this month and year")
+
+	# Check if file exists
+	if not os.path.exists(salary.file_path):
+		raise HTTPException(status_code=404, detail="Salary file not found")
+
+	# Return the file
+	return FileResponse(path=salary.file_path, filename=f"salary_{teacher_id}_{month}_{year}.pdf", media_type='application/pdf')
 
 
 # Delete salary by id

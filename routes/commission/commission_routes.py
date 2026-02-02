@@ -4,6 +4,7 @@ from typing import Optional, List
 from pathlib import Path
 from datetime import datetime
 import os
+from fastapi.responses import FileResponse
 
 from db import get_db
 from models.commission.commission_models import CommissionSlip
@@ -94,6 +95,27 @@ def get_commission_by_id(commission_id: str, db: Session = Depends(get_db)):
 def get_commissions_for_counsellor(counsellor_id: str, db: Session = Depends(get_db)):
     commissions = db.query(CommissionSlip).filter_by(counsellor_id=counsellor_id).order_by(CommissionSlip.year.desc(), CommissionSlip.month.desc()).all()
     return commissions
+
+
+# Download commission slip PDF by counsellor id, month, and year
+@router.get("/download/{counsellor_id}/{month}/{year}")
+def download_commission(counsellor_id: str, month: int, year: int, db: Session = Depends(get_db)):
+    # Verify counsellor exists
+    counsellor = db.query(Counsellor).filter_by(counsellor_id=counsellor_id).first()
+    if not counsellor:
+        raise HTTPException(status_code=404, detail="Counsellor not found")
+
+    # Get the commission record
+    commission = db.query(CommissionSlip).filter_by(counsellor_id=counsellor_id, month=month, year=year).first()
+    if not commission:
+        raise HTTPException(status_code=404, detail="Commission slip not found for this month and year")
+
+    # Check if file exists
+    if not os.path.exists(commission.file_path):
+        raise HTTPException(status_code=404, detail="Commission slip file not found")
+
+    # Return the file
+    return FileResponse(path=commission.file_path, filename=f"commission_{counsellor_id}_{month}_{year}.pdf", media_type='application/pdf')
 
 
 @router.put("/put-by/{commission_id}", response_model=CommissionOut)
