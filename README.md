@@ -248,6 +248,40 @@ The server will start on `http://0.0.0.0:8000` (accessible from any IP)
 
 Database tables will be created automatically on startup.
 
+## Docker Setup
+
+For easier deployment and development, you can use Docker and Docker Compose to run the application with PostgreSQL and pgAdmin.
+
+### Prerequisites
+
+- Docker
+- Docker Compose
+
+### Running with Docker Compose
+
+1. Ensure you have `Dockerfile` and `docker-compose.yml` in the project root.
+
+2. Run the following command:
+
+   ```bash
+   docker-compose up --build
+   ```
+
+3. Access the services:
+   - **FastAPI App**: `http://localhost:8000`
+   - **pgAdmin**: `http://localhost:5050`
+     - Email: `admin@example.com`
+     - Password: `admin`
+   - **PostgreSQL**: `localhost:5432` (for external connections)
+
+### Services Overview
+
+- **app**: The FastAPI backend application.
+- **postgres**: PostgreSQL database with persistent data volume.
+- **pgadmin**: Web-based PostgreSQL administration tool.
+
+The `uploads` folder is mounted as a volume to persist uploaded files locally.
+
 ## API Documentation
 
 Once the server is running, visit:
