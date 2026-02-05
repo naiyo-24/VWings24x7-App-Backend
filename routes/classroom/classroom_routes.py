@@ -73,36 +73,40 @@ async def create_classroom(
     photo: UploadFile = File(None),
     db: Session = Depends(get_db)
 ):
-    class_id = generate_class_id(class_name)
-    photo_path = None
-    if photo:
-        photo_path = await save_class_photo(class_id, photo)
+    try:
+        class_id = generate_class_id(class_name)
+        photo_path = None
+        if photo:
+            photo_path = await save_class_photo(class_id, photo)
 
-    # parse json lists if provided
-    t_ids = json.loads(teacher_ids) if teacher_ids else None
-    s_ids = json.loads(student_ids) if student_ids else None
+        # parse json lists if provided
+        t_ids = json.loads(teacher_ids) if teacher_ids else None
+        s_ids = json.loads(student_ids) if student_ids else None
 
-    classroom = Classroom(
-        class_id=class_id,
-        class_name=class_name,
-        class_description=class_description,
-        class_photo=photo_path,
-        teacher_ids=t_ids,
-        student_ids=s_ids,
-        admin_id=admin_id,
-        created_at=datetime.utcnow(),
-        updated_at=datetime.utcnow(),
-    )
-    db.add(classroom)
-    db.commit()
-    db.refresh(classroom)
-    return {
-        **{k: getattr(classroom, k) for k in [
-            'class_id', 'class_name', 'class_description', 'class_photo', 'teacher_ids', 'student_ids', 'admin_id', 'created_at', 'updated_at'
-        ]},
-        'teacher_details': _person_summaries(db, Teacher, 'teacher_id', classroom.teacher_ids),
-        'student_details': _person_summaries(db, Student, 'student_id', classroom.student_ids),
-    }
+        classroom = Classroom(
+            class_id=class_id,
+            class_name=class_name,
+            class_description=class_description,
+            class_photo=photo_path,
+            teacher_ids=t_ids,
+            student_ids=s_ids,
+            admin_id=admin_id,
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow(),
+        )
+        db.add(classroom)
+        db.commit()
+        db.refresh(classroom)
+        return {
+            **{k: getattr(classroom, k) for k in [
+                'class_id', 'class_name', 'class_description', 'class_photo', 'teacher_ids', 'student_ids', 'admin_id', 'created_at', 'updated_at'
+            ]},
+            'teacher_details': _person_summaries(db, Teacher, 'teacher_id', classroom.teacher_ids),
+            'student_details': _person_summaries(db, Student, 'student_id', classroom.student_ids),
+        }
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error creating classroom: {str(e)}")
 
 # Get all classrooms
 @router.get("/get-all", response_model=List[ClassroomResponse])
